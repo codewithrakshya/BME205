@@ -12,86 +12,97 @@ Given: A directed graph that contains an Eulerian path, where the graph is given
 
 Return: An Eulerian path in this graph.
 """
-class Eulerian:
-    def __init__(self):
-        self.graph = {}  # Initialize an empty graph represented as an adjacency list
-        self.eulerian_path = []  # Initialize an empty list to store the Eulerian path
+from collections import Counter, defaultdict
+def parse_adjacency_list(inFile):
+    """Parse adjacency list format [u -> v1,v2,v3]
+    and return corresponding graph.
+    """
+    graph = {}
+    for line in inFile.readlines():
+        u, vs = line.strip().split(' -> ')
+        u, vs = int(u), list(map(int, vs.split(',')))
+        if u not in graph:
+            graph[u] = []
+        graph[u].extend(vs)
+    return graph
 
-    def addEdge(self, start, end_str):
-        # Add an edge to the graph
-        ends = end_str.split(',')
-        if start in self.graph:
-            self.graph[start].extend(ends)
-        else:
-            self.graph[start] = ends
+def find_cycle(graph, start):
+    """Return a sequence of nodes which form a cycle
+    starting from a node 'start'.
+    """
+    cycle = []
+    u = graph[start].pop()
+    while u != start:
+        cycle.append(u)
+        u = graph[u].pop()
+    cycle.append(u)
 
-    def depthfirstSearch(self, current_node):
-        # Use an explicit stack for DFS
-        stack = [current_node]
-        while stack:
-            node = stack[-1]
-            if node in self.graph and self.graph[node]:
-                next_node = self.graph[node].pop()  # Pop from the end for efficiency
-                stack.append(next_node)
-            else:
-                self.eulerian_path.append(stack.pop())
+    # Clean up nodes which have no edges.
+    toRemove = [k for k, v in graph.items() if not v]
+    for k in toRemove:
+        del graph[k]
 
-    def startNode(self):
-        start, end = self.In_Out_degrees()
-        if end is None:
-            return start
-        else:
-            return end
+    return cycle
 
-    def In_Out_degrees(self):
-        # Calculate in-degrees and out-degrees for each node
-        in_degrees = {}
-        out_degrees = {}
-        start_node = None
-        end_node = None
+def find_eulerian_cycle(graph, start=0):
+    """Return an eulerian cycle of the graph."""
+    cycle = [start] + find_cycle(graph, start)
+    updated = True
+    while updated:
+        updated = False
+        for i, start in enumerate(cycle):
+            # If an edge starting from the node still exists,
+            # insert new cycle.
+            if start in graph:
+                updated = True
+                cycle = cycle[:i+1] + find_cycle(graph, start) + cycle[i+1:]
+                break
 
-        for node in self.graph:
-            out_degree = len(self.graph[node])
-            out_degrees[node] = out_degree
+    return cycle
 
-            if node not in in_degrees:
-                in_degrees[node] = 0
+def add_imaginary_edge(graph):
+    """Add imaginary edge (start, end), where start is the node
+    with surplus incoming edges, and end is the node with surplus
+    outgoing edges.
+    """
+    outgoingEdgeCounts = {}
+    incomingEdgeCounts = {}
+    for u in graph:
+        if u not in outgoingEdgeCounts:
+            outgoingEdgeCounts[u] = 0
+        outgoingEdgeCounts[u] += len(graph[u])
+        for v in graph[u]:
+            if v not in incomingEdgeCounts:
+                incomingEdgeCounts[v] = 0
+            incomingEdgeCounts[v] += 1
 
-            for neighbor in self.graph[node]:
-                if neighbor not in in_degrees:
-                    in_degrees[neighbor] = 1
-                else:
-                    in_degrees[neighbor] += 1
+    # Compute the difference between incoming and outgoing edges manually
+    surplus_incoming = {k: incomingEdgeCounts[k] - outgoingEdgeCounts.get(k, 0)
+                        for k in incomingEdgeCounts if k not in outgoingEdgeCounts
+                        or incomingEdgeCounts[k] > outgoingEdgeCounts[k]}
+    surplus_outgoing = {k: outgoingEdgeCounts[k] - incomingEdgeCounts.get(k, 0)
+                        for k in outgoingEdgeCounts if k not in incomingEdgeCounts
+                        or outgoingEdgeCounts[k] > incomingEdgeCounts[k]}
 
-        for node in self.graph:
-            if out_degrees[node] - in_degrees[node] == 1:
-                start_node = node
-            elif in_degrees[node] - out_degrees[node] == 1:
-                end_node = node
+    start = list(surplus_incoming.keys())[0]
+    end = list(surplus_outgoing.keys())[0]
 
-        return start_node, end_node
+    # Add imaginary edge.
+    graph[start].append(end)
+    return start, end
 
+def find_eulerian_path(graph):
+    """Return an eulerian path of the graph."""
+    start, end = add_imaginary_edge(graph)
+    cycle = find_eulerian_cycle(graph, start=end)[:-1]
+    for i in range(len(cycle)):
+        if cycle[i] == start and cycle[(i+1) % len(cycle)] == end:
+            path = cycle[i+1:] + cycle[:i+1]
 
-    def findEulerianPath(self):
-        # Find the Eulerian path starting from the appropriate node
-        start = self.startNode()
-        self.depthfirstSearch(start)
-        return ' -> '.join(reversed(self.eulerian_path))
+    return path
 
-# Accept the input file path from the user
-input_file_path = input("Enter the input file path: ")
-
-eulerian_graph = Eulerian()
-
-# Read the input from the specified file
-with open(input_file_path, 'r') as file:
-    for line in file:
-        parts = line.strip().split(' -> ')
-        start_node = parts[0]
-        end_nodes = parts[1]
-        eulerian_graph.addEdge(start_node, end_nodes)
-
-eulerian_path = eulerian_graph.findEulerianPath()
-print(eulerian_path)
-
-
+# Now, utilize the defined functions to find the Eulerian path
+graph = parse_adjacency_list(open("/Users/rausharm/Downloads/rosalind_ba3g-6.txt", 'r'))
+eulerian_path_new = find_eulerian_path(graph)
+eulerian_path_new_str = '->'.join(map(str, eulerian_path_new))
+print(eulerian_path_new_str)
